@@ -5,11 +5,19 @@ export const getRuteMellomPunkter = async (
   stoppY: number
 ) => {
   const apiKey = import.meta.env.VITE_API_KEY;
-  const query = `https://www.webatlas.no/WAAPI-Ferd/Route/Expanded`;
+  const query = `https://ruteberegner.api.norkart.no/Route/Expanded`;
 
   const postData = {
-    Start: { X: startX, Y: startY, FeatureSnapRestriction: ['Road', 'Motorway'] },
-    Stop: { X: stoppX, Y: stoppY, FeatureSnapRestriction: ['Road', 'Motorway'] },
+    Start: {
+      X: startX,
+      Y: startY,
+      FeatureSnapRestriction: ['Road', 'Motorway'],
+    },
+    Stop: {
+      X: stoppX,
+      Y: stoppY,
+      FeatureSnapRestriction: ['Road', 'Motorway'],
+    },
     ViaPoints: [],
     SrsId: 4326,
     GraphName: 'ta-norden-dynamic',
