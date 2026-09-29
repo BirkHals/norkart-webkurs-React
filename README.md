@@ -56,22 +56,17 @@ Spør gjerne om noe er uklart.
 
 Kan gjøres i valgfri rekkefølge (unntatt noen ekstraoppgaver som bygger på tidligere oppgaver). Komfortabel med React/TypeScript? Gjør gjerne noe helt eget med dataene og verktøyene som er tilgjengelig!
 
-### Oppgave 1: Utvid kartfunksjonaliteten
-
-Følg [Maplibre sin tutorial](https://maplibre-react-components.pentatrion.com/tutorial) for å legge til flere funksjoner i appen.
-_ℹ️ Vi bruker TypeScript, ikke JavaScript — tilpass koden fra tutorialen deretter. Spør om hjelp ved behov!_
-
-_💡 Tips: Kartet bruker Norkarts egne bakgrunnskart. Prøv gjerne andre stiler ved å endre `NORKART_BASEMAP_VARIANT` i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) (f.eks. `darkmode` eller `ortofoto`)._
-
-### Oppgave 2: Vis høyde i kartet basert på punkt
+### Oppgave 1: Vis høyde i kartet basert på punkt
 
 [getHoydeFromPunkt.ts](/src/api/getHoydeFromPunkt.ts) henter høyde for et geografisk punkt. I [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) lagres høyden i staten `pointHoyde` og logges til konsollen ved klikk i kartet. Implementer en visning av denne høyden i applikasjonen.
 
 Forslag: bruk [RPopup](https://maplibre-react-components.pentatrion.com/components/rpopup), eller lag en egen komponent (f.eks. et MUI [Card](https://mui.com/material-ui/react-card/)) som viser latitude, longitude og høyde.
 
-Hint: latitude/longitude for valgt punkt ligger i staten `clickPoint` — nyttig for RPopup.
+_Hint: latitude/longitude for valgt punkt ligger i staten `clickPoint` — nyttig for RPopup._
 
-### Oppgave 3: Implementer søk etter adresse
+_💡 Tips: Kartet bruker Norkarts egne bakgrunnskart. Prøv gjerne andre stiler ved å endre `NORKART_BASEMAP_VARIANT` i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) (f.eks. `darkmode` eller `ortofoto`). Se også [Maplibre sin tutorial](https://maplibre-react-components.pentatrion.com/tutorial) for flere kartfunksjoner (tilpass koden til TypeScript)._
+
+### Oppgave 2: Implementer søk etter adresse
 
 [SearchBar.tsx](/src/components/SearchBar.tsx) eksporterer en søkekomponent. Importer og plasser den i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx):
 
@@ -128,7 +123,7 @@ Deretter: la kartet "fly til" valgt adresse ved å bruke `address`-staten sammen
 </RMap>
 ```
 
-### Oppgave 4: Vis bygninger i kartet
+### Oppgave 3: Vis bygninger i kartet
 
 Implementer [getBygningAtPunkt.ts](/src/api/getBygningAtPunkt.ts) (se filen for instruksjoner) for å hente bygningsdata for et punkt. Bruk den deretter i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx):
 
@@ -198,20 +193,20 @@ Implementer [getBygningAtPunkt.ts](/src/api/getBygningAtPunkt.ts) (se filen for 
 #### Ekstraoppgaver
 
 - API-et returnerer også andre bygningsdata — vis dem med en [RPopup](https://maplibre-react-components.pentatrion.com/components/rpopup) eller et [MUI Card](https://mui.com/material-ui/react-card/).
-- Har du implementert adressesøk ([Oppgave 3](#oppgave-3-implementer-søk-etter-adresse))? Bruk posisjonen fra valgt adresse til å hente og vise bygningen der.
+- Har du implementert adressesøk ([Oppgave 2](#oppgave-2-implementer-søk-etter-adresse))? Bruk posisjonen fra valgt adresse til å hente og vise bygningen der.
 - Implementer [getRosDataForBygning](/src/api/getRosDataForBygning.ts) for å hente Risiko- og sårbarhetsdata (ROS) for en bygning, og vis det i kartet eller med MUI-komponenter.
 
-### Oppgave 5: Hent og vis solmengde for tak ved punkt
+### Oppgave 4: Hent og vis solmengde for tak ved punkt
 
 Implementer [getTakflateDataForPunkt](/src/api/getTakflateDataForPunkt.ts) for å hente solmengde-data for et tak ved et punkt.
 
-Bruk funksjonen i `onMapClick` i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) for å vise takets geometri i kartet (se [Oppgave 4](#oppgave-4-vis-bygninger-i-kartet)) og den beregnede solmengden (kWh/m² per måned), f.eks. med [MUI Table](https://mui.com/material-ui/react-table/).
+Bruk funksjonen i `onMapClick` i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) for å vise takets geometri i kartet (se [Oppgave 3](#oppgave-3-vis-bygninger-i-kartet)) og den beregnede solmengden (kWh/m² per måned), f.eks. med [MUI Table](https://mui.com/material-ui/react-table/).
 
 #### Ekstraoppgave
 
-Har du implementert [getBygningAtPunkt](/src/api/getBygningAtPunkt.ts) ([Oppgave 4](#oppgave-4-vis-bygninger-i-kartet))? Bruk bygningsnummeret til å implementere [getTakflateDataForBygning](/src/api/getTakflateDataForBygning.ts) og hent solmengde for alle tak på bygningen — vis dem i kartet og som total solmengde over året.
+Har du implementert [getBygningAtPunkt](/src/api/getBygningAtPunkt.ts) ([Oppgave 3](#oppgave-3-vis-bygninger-i-kartet))? Bruk bygningsnummeret til å implementere [getTakflateDataForBygning](/src/api/getTakflateDataForBygning.ts) og hent solmengde for alle tak på bygningen — vis dem i kartet og som total solmengde over året.
 
-### Oppgave 6: Planlegg en rute mellom to punkter
+### Oppgave 5: Planlegg en rute mellom to punkter
 
 Implementer [getRuteMellomPunkter.ts](/src/api/getRuteMellomPunkter.ts) (se filen for instruksjoner) for å hente en kjørerute mellom to punkter fra Norkarts ruteplanlegger. Bruk den deretter i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx):
 
@@ -290,7 +285,7 @@ Implementer [getRuteMellomPunkter.ts](/src/api/getRuteMellomPunkter.ts) (se file
 
 - API-et returnerer også kostnader for ruten (`CostList`), f.eks. reisetid — vis dem med en [RPopup](https://maplibre-react-components.pentatrion.com/components/rpopup) eller et [MUI Card](https://mui.com/material-ui/react-card/).
 
-### Oppgave 7: Gjør noe med andre, åpne geografiske data
+### Oppgave 6: Gjør noe med andre, åpne geografiske data
 
 Eksempler:
 
