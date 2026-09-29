@@ -105,7 +105,7 @@ export const MapLibreMap = () => {
 
 Søkefeltet vises nå, men uten forslag. Bruk [getAddresserFromSearchText](/src/api/getAdresserFromSearchText.ts) i `SearchBar` for å hente adresseforslag fra Norkarts API.
 
-Hint: adressealternativene settes i konstanten `adresser` i `useEffect` — husk `await` siden funksjonen er asynkron (se hvordan `getHoydeFromPunkt` brukes i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) som eksempel).
+_Hint: adressealternativene settes i konstanten `adresser` i `useEffect` — husk `await` siden funksjonen er asynkron (se hvordan `getHoydeFromPunkt` brukes i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx) som eksempel)._
 
 Deretter: la kartet "fly til" valgt adresse ved å bruke `address`-staten sammen med `MapFlyTo`:
 
