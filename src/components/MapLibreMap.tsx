@@ -115,7 +115,13 @@ type MapLibreMapProps = {
 
 export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
   const [building, setBuilding] = useState<Bygning | null | undefined>();
+  const isBuilding = building !== undefined && building !== null;
   const category = getBuildingCategory(building);
+  const panelColors = {
+    backgroundColor: palette.panelBackground,
+    color: palette.panelText,
+    border: `1px solid ${palette.panelBorder}`,
+  };
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
   );
@@ -127,58 +133,60 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
   const [bygningsOmriss, setBygningsOmriss] = useState<GeoJSON | undefined>(
     undefined
   );
-  const [isBuilding, setIsBuilding] = useState<boolean | undefined>(undefined);
   const [takflater, setTakflater] = useState<TakflateData[] | undefined>(
     undefined
   );
-  const latestClick = useRef(0);
+  const latestRequest = useRef(0);
 
   const loadDataAtPoint = async (
     lng: number,
     lat: number,
     selectedAddress?: string
   ) => {
-    const clickId = ++latestClick.current;
+    const requestId = ++latestRequest.current;
     setClickPoint(new LngLat(lng, lat));
     setPointAddress(selectedAddress);
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
     setBuilding(undefined);
-    setIsBuilding(undefined);
     setTakflater(undefined);
 
     const [bygningResponse, hoyder] = await Promise.all([
       getBygningAtPunkt(lng, lat),
       getHoydeFromPunkt(lng, lat),
     ]);
-    if (clickId !== latestClick.current) return;
+    if (requestId !== latestRequest.current) return;
 
     setPointHoydeAtPunkt(hoyder[0]?.Z);
     setBuilding(bygningResponse ?? null);
 
-    let parsedOutline: GeoJSON | undefined;
+    let parsedOutline: Geometry | undefined;
     try {
       const omriss = bygningResponse?.FkbData?.BygningsOmriss;
-      parsedOutline = omriss ? (JSON.parse(omriss) as GeoJSON) : undefined;
+      parsedOutline = omriss ? (JSON.parse(omriss) as Geometry) : undefined;
     } catch (error) {
       console.error('Could not parse building geometry:', error);
     }
 
-    setBygningsOmriss(parsedOutline);
-    const foundBuilding = Boolean(parsedOutline);
-    setIsBuilding(foundBuilding);
+    const clickedBuilding =
+      parsedOutline !== undefined && pointIsInGeometry(lng, lat, parsedOutline);
 
-    if (!foundBuilding) {
+    if (!clickedBuilding) {
+      setBuilding(null);
+      setBygningsOmriss(undefined);
       setPointAddress(null);
       setTakflater([]);
       return;
     }
 
+    setBuilding(bygningResponse ?? null);
+    setBygningsOmriss(parsedOutline);
+
     const [allTakflater, nearbyAddress] = await Promise.all([
       getTakflateDataForPunkt(lng, lat),
       selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
     ]);
-    if (clickId !== latestClick.current) return;
+    if (requestId !== latestRequest.current) return;
 
     setPointAddress(selectedAddress ?? nearbyAddress);
     const takflateData = allTakflater.filter((takflate) => {
@@ -274,9 +282,7 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
 
         <Overlay
           style={{
-            backgroundColor: palette.panelBackground,
-            color: palette.panelText,
-            border: `1px solid ${palette.panelBorder}`,
+            ...panelColors,
             borderRadius: 8,
           }}
         >
@@ -325,17 +331,14 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
       {clickPoint && (
         <div
           style={{
+            ...panelColors,
             position: 'absolute',
             top: 16,
             right: 16,
             zIndex: 1,
             padding: 16,
-            background: 'white',
             borderRadius: 8,
             boxShadow: '0 2px 8px #0003',
-            backgroundColor: palette.panelBackground,
-            color: palette.panelText,
-            border: `1px solid ${palette.panelBorder}`,
             width: 360,
             maxWidth: 'calc(100% - 32px)',
             maxHeight: 'calc(100% - 32px)',
@@ -345,40 +348,31 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
           <strong>
             {isBuilding ? 'Bygningsinformasjon' : 'Punktinformasjon'}
           </strong>
-          <div
-            style={{
-              margin: '8px 0',
-              borderLeft: `4px solid ${category.color}`,
-              paddingLeft: 8,
-            }}
-          >
-            {building === undefined ? (
-              'Henter bygningstype...'
-            ) : building === null ? (
-              'Ingen bygningsdata tilgjengelig.'
-            ) : (
-              <>
-                <strong
-                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <BuildingIcon name={category.icon} /> {category.label}
-                </strong>
-                <div>
-                  {building.MatrikkelData?.Bygningstype ??
-                    'Ukjent bygningstype'}
-                </div>
-                {building.MatrikkelData?.Naringsgruppe && (
-                  <div>{building.MatrikkelData.Naringsgruppe}</div>
-                )}
-              </>
-            )}
-          </div>
+          {building && (
+            <div
+              style={{
+                margin: '8px 0',
+                borderLeft: `4px solid ${category.color}`,
+                paddingLeft: 8,
+              }}
+            >
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <BuildingIcon name={category.icon} /> {category.label}
+              </strong>
+              <div>
+                {building.MatrikkelData?.Bygningstype ?? 'Ukjent bygningstype'}
+              </div>
+              {building.MatrikkelData?.Naringsgruppe && (
+                <div>{building.MatrikkelData.Naringsgruppe}</div>
+              )}
+            </div>
+          )}
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
           <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
-          {isBuilding === undefined ? (
+          {building === undefined ? (
             <div>Kontrollerer om punktet ligger på en bygning...</div>
           ) : isBuilding ? (
             <>
