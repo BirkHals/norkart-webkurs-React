@@ -90,6 +90,7 @@ export const MapLibreMap = () => {
   const [bygningsOmriss, setBygningsOmriss] = useState<GeoJSON | undefined>(
     undefined
   );
+  const [isBuilding, setIsBuilding] = useState<boolean | undefined>(undefined);
   const [takflater, setTakflater] = useState<TakflateData[] | undefined>(
     undefined
   );
@@ -105,27 +106,43 @@ export const MapLibreMap = () => {
     setPointAddress(selectedAddress);
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
+    setIsBuilding(undefined);
     setTakflater(undefined);
 
-    const [bygningResponse, hoyder, takflateData, nearbyAddress] =
-      await Promise.all([
-        getBygningAtPunkt(lng, lat),
-        getHoydeFromPunkt(lng, lat),
-        getTakflateDataForPunkt(lng, lat),
-        selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
-      ]);
+    const [bygningResponse, hoyder] = await Promise.all([
+      getBygningAtPunkt(lng, lat),
+      getHoydeFromPunkt(lng, lat),
+    ]);
+    if (clickId !== latestClick.current) return;
+
+    setPointHoydeAtPunkt(hoyder[0]?.Z);
+
+    let parsedOutline: GeoJSON | undefined;
+    try {
+      const omriss = bygningResponse?.FkbData?.BygningsOmriss;
+      parsedOutline = omriss ? (JSON.parse(omriss) as GeoJSON) : undefined;
+    } catch (error) {
+      console.error('Could not parse building geometry:', error);
+    }
+
+    setBygningsOmriss(parsedOutline);
+    const foundBuilding = Boolean(parsedOutline);
+    setIsBuilding(foundBuilding);
+
+    if (!foundBuilding) {
+      setPointAddress(null);
+      setTakflater([]);
+      return;
+    }
+
+    const [takflateData, nearbyAddress] = await Promise.all([
+      getTakflateDataForPunkt(lng, lat),
+      selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
+    ]);
     if (clickId !== latestClick.current) return;
 
     setPointAddress(selectedAddress ?? nearbyAddress);
-    setPointHoydeAtPunkt(hoyder[0]?.Z);
     setTakflater(takflateData);
-    try {
-      const omriss = bygningResponse?.FkbData?.BygningsOmriss;
-      setBygningsOmriss(omriss ? JSON.parse(omriss) : undefined);
-    } catch (error) {
-      console.error('Could not parse building geometry:', error);
-      setBygningsOmriss(undefined);
-    }
   };
 
   const onMapClick = (e: MapLayerMouseEvent) => {
@@ -198,7 +215,7 @@ export const MapLibreMap = () => {
           <RMarker
             longitude={clickPoint.lng}
             latitude={clickPoint.lat}
-            initialColor="#b23b8c"
+            initialColor="#da1d9e"
           />
         )}
 
@@ -234,58 +251,68 @@ export const MapLibreMap = () => {
             overflowY: 'auto',
           }}
         >
-          <strong>Punktinformasjon</strong>
+          <strong>
+            {isBuilding ? 'Bygningsinformasjon' : 'Punktinformasjon'}
+          </strong>
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
-          <div>
-            Adresse:{' '}
-            {pointAddress === undefined
-              ? 'Henter...'
-              : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
-          </div>
           <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
 
-          <h3>Solmengde for tak</h3>
-          {takflater === undefined ? (
-            <div>Henter takdata...</div>
-          ) : takflater.length === 0 ? (
-            <div>
-              Ingen takflate funnet ved punktet. Soldata finnes ikke for veier
-              og andre områder uten tak.
-            </div>
-          ) : (
-            takflater.map((takflate) => (
-              <section key={takflate.TakflateId}>
-                <strong>Takflate {takflate.TakflateId}</strong>
-                <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
-                <TableContainer
-                  component={Paper}
-                  sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
-                >
-                  <Table size="small" aria-label="Solmengde per måned">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Måned</TableCell>
-                        <TableCell align="right">kWh/m²</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {MONTHS.map(({ label, field }) => (
-                        <TableRow key={field}>
-                          <TableCell component="th" scope="row">
-                            {label}
-                          </TableCell>
-                          <TableCell align="right">{takflate[field]}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </section>
-            ))
-          )}
+          {isBuilding === undefined ? (
+            <div>Kontrollerer om punktet ligger på en bygning...</div>
+          ) : isBuilding ? (
+            <>
+              <div>
+                Adresse:{' '}
+                {pointAddress === undefined
+                  ? 'Henter...'
+                  : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
+              </div>
+              <h3>Solmengde for tak</h3>
+              {takflater === undefined ? (
+                <div>Henter takdata...</div>
+              ) : takflater.length === 0 ? (
+                <div>
+                  Bygningen er markert rosa, men det finnes ingen takflater
+                  eller soldata for den.
+                </div>
+              ) : (
+                takflater.map((takflate) => (
+                  <section key={takflate.TakflateId}>
+                    <strong>Takflate {takflate.TakflateId}</strong>
+                    <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
+                    <TableContainer
+                      component={Paper}
+                      sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
+                    >
+                      <Table size="small" aria-label="Solmengde per måned">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Måned</TableCell>
+                            <TableCell align="right">kWh/m²</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {MONTHS.map(({ label, field }) => (
+                            <TableRow key={field}>
+                              <TableCell component="th" scope="row">
+                                {label}
+                              </TableCell>
+                              <TableCell align="right">
+                                {takflate[field]}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </section>
+                ))
+              )}
+            </>
+          ) : null}
         </div>
       )}
     </div>
