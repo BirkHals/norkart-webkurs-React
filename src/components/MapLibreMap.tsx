@@ -11,13 +11,26 @@ import {
   RSource,
   useMap,
 } from 'maplibre-react-components';
-import type { GeoJSON } from 'geojson';
+import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
 import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
+import {
+  getTakflateDataForPunkt,
+  type TakflateData,
+} from '../api/getTakflateDataForPunkt';
 import { useEffect, useRef, useState } from 'react';
 import { Overlay } from './Overlay';
 import DrawComponent from './DrawComponent';
 import { SearchBar, type Address } from './SearchBar';
+import {
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+} from '@mui/material';
 
 const TRONDHEIM_COORDS: [number, number] = [10.40565401, 63.4156575];
 
@@ -41,6 +54,29 @@ const polygonStyle = {
   'fill-color': 'rgba(178, 59, 140, 0.41)',
 };
 
+const roofStyle = {
+  'fill-outline-color': '#7a285f',
+  'fill-color': 'rgba(237, 174, 54, 0.7)',
+};
+
+const MONTHS: {
+  label: string;
+  field: keyof Omit<TakflateData, 'TakflateId' | 'Geometri'>;
+}[] = [
+  { label: 'Januar', field: 'Januar' },
+  { label: 'Februar', field: 'Februar' },
+  { label: 'Mars', field: 'Mars' },
+  { label: 'April', field: 'April' },
+  { label: 'Mai', field: 'Mai' },
+  { label: 'Juni', field: 'Juni' },
+  { label: 'Juli', field: 'Juli' },
+  { label: 'August', field: 'August' },
+  { label: 'September', field: 'September' },
+  { label: 'Oktober', field: 'Oktober' },
+  { label: 'November', field: 'November' },
+  { label: 'Desember', field: 'Desember' },
+];
+
 export const MapLibreMap = () => {
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
@@ -50,22 +86,27 @@ export const MapLibreMap = () => {
   const [bygningsOmriss, setBygningsOmriss] = useState<GeoJSON | undefined>(
     undefined
   );
+  const [takflater, setTakflater] = useState<TakflateData[] | undefined>(
+    undefined
+  );
   const latestClick = useRef(0);
-  const onMapClick = async (e: MapLayerMouseEvent) => {
+
+  const loadDataAtPoint = async (lng: number, lat: number) => {
     const clickId = ++latestClick.current;
-    const { lng, lat } = e.lngLat;
-    setAddress(null);
     setClickPoint(new LngLat(lng, lat));
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
+    setTakflater(undefined);
 
-    const [bygningResponse, hoyder] = await Promise.all([
+    const [bygningResponse, hoyder, takflateData] = await Promise.all([
       getBygningAtPunkt(lng, lat),
       getHoydeFromPunkt(lng, lat),
+      getTakflateDataForPunkt(lng, lat),
     ]);
     if (clickId !== latestClick.current) return;
 
     setPointHoydeAtPunkt(hoyder[0]?.Z);
+    setTakflater(takflateData);
     try {
       const omriss = bygningResponse?.FkbData?.BygningsOmriss;
       setBygningsOmriss(omriss ? JSON.parse(omriss) : undefined);
@@ -73,6 +114,35 @@ export const MapLibreMap = () => {
       console.error('Could not parse building geometry:', error);
       setBygningsOmriss(undefined);
     }
+  };
+
+  const onMapClick = (e: MapLayerMouseEvent) => {
+    setAddress(null);
+    void loadDataAtPoint(e.lngLat.lng, e.lngLat.lat);
+  };
+
+  const onAddressSelect = (selectedAddress: Address) => {
+    const { X: lng, Y: lat } = selectedAddress.PayLoad.Posisjon;
+    setAddress(selectedAddress);
+    void loadDataAtPoint(lng, lat);
+  };
+
+  const takflateGeoJson: FeatureCollection<Geometry> = {
+    type: 'FeatureCollection',
+    features: (takflater ?? []).flatMap((takflate) => {
+      try {
+        return [
+          {
+            type: 'Feature' as const,
+            geometry: JSON.parse(takflate.Geometri) as Geometry,
+            properties: { TakflateId: takflate.TakflateId },
+          },
+        ];
+      } catch (error) {
+        console.error('Could not parse roof geometry:', error);
+        return [];
+      }
+    }),
   };
 
   return (
@@ -100,38 +170,30 @@ export const MapLibreMap = () => {
           </>
         )}
 
-        {address ? (
-          <RMarker
-            longitude={address.PayLoad.Posisjon.X}
-            latitude={address.PayLoad.Posisjon.Y}
-            initialColor="#d9482b"
-          />
-        ) : (
-          clickPoint && (
-            <RMarker
-              longitude={clickPoint.lng}
-              latitude={clickPoint.lat}
-              initialColor="#d9482b"
-            />
-          )
-        )}
-
-        {bygningsOmriss && (
+        {takflateGeoJson.features.length > 0 && (
           <>
-            <RSource id="bygning" type="geojson" data={bygningsOmriss} />
+            <RSource id="takflater" type="geojson" data={takflateGeoJson} />
             <RLayer
-              source="bygning"
-              id="bygning-fill"
+              source="takflater"
+              id="takflater-fill"
               type="fill"
-              paint={polygonStyle}
+              paint={roofStyle}
             />
           </>
+        )}
+
+        {clickPoint && (
+          <RMarker
+            longitude={clickPoint.lng}
+            latitude={clickPoint.lat}
+            initialColor="#b23b8c"
+          />
         )}
 
         <Overlay>
           <h2>Se her!!!</h2>
           <p>Halla så fin du ser ut i dag</p>
-          <SearchBar setAddress={setAddress} />
+          <SearchBar onAddressSelect={onAddressSelect} />
         </Overlay>
 
         <DrawComponent />
@@ -143,7 +205,7 @@ export const MapLibreMap = () => {
         )}
       </RMap>
 
-      {clickPoint && pointHoyde !== undefined && (
+      {clickPoint && (
         <div
           style={{
             position: 'absolute',
@@ -154,12 +216,55 @@ export const MapLibreMap = () => {
             background: 'white',
             borderRadius: 8,
             boxShadow: '0 2px 8px #0003',
+            width: 360,
+            maxWidth: 'calc(100% - 32px)',
+            maxHeight: 'calc(100% - 32px)',
+            overflowY: 'auto',
           }}
         >
           <strong>Punktinformasjon</strong>
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
-          <div>Høyde: {pointHoyde} m</div>
+          <div>
+            Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
+          </div>
+
+          <h3>Solmengde for tak</h3>
+          {takflater === undefined ? (
+            <div>Henter takdata...</div>
+          ) : takflater.length === 0 ? (
+            <div>Fant ingen takflater ved punktet.</div>
+          ) : (
+            takflater.map((takflate) => (
+              <section key={takflate.TakflateId}>
+                <strong>Takflate {takflate.TakflateId}</strong>
+                <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
+                <TableContainer
+                  component={Paper}
+                  sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
+                >
+                  <Table size="small" aria-label="Solmengde per måned">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Måned</TableCell>
+                        <TableCell align="right">kWh/m²</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {MONTHS.map(({ label, field }) => (
+                        <TableRow key={field}>
+                          <TableCell component="th" scope="row">
+                            {label}
+                          </TableCell>
+                          <TableCell align="right">{takflate[field]}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </section>
+            ))
+          )}
         </div>
       )}
     </div>

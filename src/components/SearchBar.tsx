@@ -13,9 +13,9 @@ export type Address = {
 };
 
 export const SearchBar = ({
-  setAddress,
+  onAddressSelect,
 }: {
-  setAddress: React.Dispatch<React.SetStateAction<Address | null>>;
+  onAddressSelect: (address: Address) => void;
 }) => {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<Address[]>([]);
@@ -61,7 +61,7 @@ export const SearchBar = ({
       }}
       onChange={(_, selectedOption) => {
         if (selectedOption) {
-          setAddress(selectedOption);
+          onAddressSelect(selectedOption);
           setOpen(false);
         }
       }}
