@@ -12,6 +12,7 @@ import {
   useMap,
 } from 'maplibre-react-components';
 import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
+import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
 import {
@@ -81,6 +82,9 @@ export const MapLibreMap = () => {
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
   );
+  const [pointAddress, setPointAddress] = useState<string | null | undefined>(
+    undefined
+  );
   const [clickPoint, setClickPoint] = useState<LngLat | undefined>(undefined);
   const [address, setAddress] = useState<Address | null>(null);
   const [bygningsOmriss, setBygningsOmriss] = useState<GeoJSON | undefined>(
@@ -91,20 +95,28 @@ export const MapLibreMap = () => {
   );
   const latestClick = useRef(0);
 
-  const loadDataAtPoint = async (lng: number, lat: number) => {
+  const loadDataAtPoint = async (
+    lng: number,
+    lat: number,
+    selectedAddress?: string
+  ) => {
     const clickId = ++latestClick.current;
     setClickPoint(new LngLat(lng, lat));
+    setPointAddress(selectedAddress);
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
     setTakflater(undefined);
 
-    const [bygningResponse, hoyder, takflateData] = await Promise.all([
-      getBygningAtPunkt(lng, lat),
-      getHoydeFromPunkt(lng, lat),
-      getTakflateDataForPunkt(lng, lat),
-    ]);
+    const [bygningResponse, hoyder, takflateData, nearbyAddress] =
+      await Promise.all([
+        getBygningAtPunkt(lng, lat),
+        getHoydeFromPunkt(lng, lat),
+        getTakflateDataForPunkt(lng, lat),
+        selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
+      ]);
     if (clickId !== latestClick.current) return;
 
+    setPointAddress(selectedAddress ?? nearbyAddress);
     setPointHoydeAtPunkt(hoyder[0]?.Z);
     setTakflater(takflateData);
     try {
@@ -124,7 +136,7 @@ export const MapLibreMap = () => {
   const onAddressSelect = (selectedAddress: Address) => {
     const { X: lng, Y: lat } = selectedAddress.PayLoad.Posisjon;
     setAddress(selectedAddress);
-    void loadDataAtPoint(lng, lat);
+    void loadDataAtPoint(lng, lat, selectedAddress.PayLoad.Text);
   };
 
   const takflateGeoJson: FeatureCollection<Geometry> = {
@@ -226,6 +238,12 @@ export const MapLibreMap = () => {
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
           <div>
+            Adresse:{' '}
+            {pointAddress === undefined
+              ? 'Henter...'
+              : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
+          </div>
+          <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
 
@@ -233,7 +251,10 @@ export const MapLibreMap = () => {
           {takflater === undefined ? (
             <div>Henter takdata...</div>
           ) : takflater.length === 0 ? (
-            <div>Fant ingen takflater ved punktet.</div>
+            <div>
+              Ingen takflate funnet ved punktet. Soldata finnes ikke for veier
+              og andre områder uten tak.
+            </div>
           ) : (
             takflater.map((takflate) => (
               <section key={takflate.TakflateId}>
