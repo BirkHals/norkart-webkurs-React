@@ -12,9 +12,9 @@ import {
   useMap,
 } from 'maplibre-react-components';
 import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
-import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
+import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import {
   getTakflateDataForPunkt,
   type TakflateData,
