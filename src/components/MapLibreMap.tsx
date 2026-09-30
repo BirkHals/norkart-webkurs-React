@@ -4,16 +4,12 @@ import {
   type RequestTransformFunction,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  RLayer,
-  RMap,
-  RMarker,
-  RSource,
-  useMap,
-} from 'maplibre-react-components';
+import { RLayer, RMap, RSource, useMap } from 'maplibre-react-components';
 import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
 import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
-import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
+import { getBygningAtPunkt, type Bygning } from '../api/getBygningAtPunkt';
+import { buildingCategories, getBuildingCategory } from '../buildingCategories';
+import { BuildingIcon } from './BuildingIcon';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
 import {
   getTakflateDataForPunkt,
@@ -50,14 +46,9 @@ const NORKART_BASEMAP_VARIANT: NorkartBasemapVariant = 'ortofoto';
 
 const NORKART_BASEMAP_STYLE = `${KVP_BASE_URL}norkart-basemap/${NORKART_BASEMAP_VARIANT}/style.json`;
 
-const polygonStyle = {
-  'fill-outline-color': 'rgba(0,0,0,0.1)',
-  'fill-color': 'rgba(178, 59, 140, 0.41)',
-};
-
 const roofStyle = {
-  'fill-outline-color': '#7a285f',
-  'fill-color': 'rgba(237, 174, 54, 0.7)',
+  'line-color': '#334155',
+  'line-width': 2,
 };
 
 const MONTHS: {
@@ -79,6 +70,8 @@ const MONTHS: {
 ];
 
 export const MapLibreMap = () => {
+  const [building, setBuilding] = useState<Bygning | null | undefined>();
+  const category = getBuildingCategory(building);
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
   );
@@ -105,6 +98,7 @@ export const MapLibreMap = () => {
     setPointAddress(selectedAddress);
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
+    setBuilding(undefined);
     setTakflater(undefined);
 
     const [bygningResponse, hoyder, takflateData, nearbyAddress] =
@@ -119,6 +113,7 @@ export const MapLibreMap = () => {
     setPointAddress(selectedAddress ?? nearbyAddress);
     setPointHoydeAtPunkt(hoyder[0]?.Z);
     setTakflater(takflateData);
+    setBuilding(bygningResponse ?? null);
     try {
       const omriss = bygningResponse?.FkbData?.BygningsOmriss;
       setBygningsOmriss(omriss ? JSON.parse(omriss) : undefined);
@@ -177,7 +172,17 @@ export const MapLibreMap = () => {
               source="bygning"
               id="bygning-fill"
               type="fill"
-              paint={polygonStyle}
+              paint={{
+                'fill-color': category.color,
+                'fill-opacity': 0.55,
+                'fill-outline-color': category.color,
+              }}
+            />
+            <RLayer
+              source="bygning"
+              id="bygning-outline"
+              type="line"
+              paint={{ 'line-color': category.color, 'line-width': 3 }}
             />
           </>
         )}
@@ -188,24 +193,44 @@ export const MapLibreMap = () => {
             <RLayer
               source="takflater"
               id="takflater-fill"
-              type="fill"
+              type="line"
               paint={roofStyle}
             />
           </>
-        )}
-
-        {clickPoint && (
-          <RMarker
-            longitude={clickPoint.lng}
-            latitude={clickPoint.lat}
-            initialColor="#b23b8c"
-          />
         )}
 
         <Overlay>
           <h2>Se her!!!</h2>
           <p>Halla så fin du ser ut i dag</p>
           <SearchBar onAddressSelect={onAddressSelect} />
+          <div
+            style={{ marginTop: 12 }}
+            aria-label="Tegnforklaring for bygningstyper"
+          >
+            {Object.values(buildingCategories).map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 4,
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 12,
+                    height: 12,
+                    background: item.color,
+                    borderRadius: 2,
+                  }}
+                />
+                {item.label}
+              </div>
+            ))}
+            <small>Klikk på en bygning for å vise type og farge.</small>
+          </div>
         </Overlay>
 
         <DrawComponent />
@@ -235,6 +260,34 @@ export const MapLibreMap = () => {
           }}
         >
           <strong>Punktinformasjon</strong>
+          <div
+            style={{
+              margin: '8px 0',
+              borderLeft: `4px solid ${category.color}`,
+              paddingLeft: 8,
+            }}
+          >
+            {building === undefined ? (
+              'Henter bygningstype...'
+            ) : building === null ? (
+              'Ingen bygningsdata tilgjengelig.'
+            ) : (
+              <>
+                <strong
+                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <BuildingIcon name={category.icon} /> {category.label}
+                </strong>
+                <div>
+                  {building.MatrikkelData?.Bygningstype ??
+                    'Ukjent bygningstype'}
+                </div>
+                {building.MatrikkelData?.Naringsgruppe && (
+                  <div>{building.MatrikkelData.Naringsgruppe}</div>
+                )}
+              </>
+            )}
+          </div>
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
           <div>

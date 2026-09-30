@@ -1,4 +1,8 @@
-type Bygning = {
+export type Bygning = {
+  MatrikkelData?: {
+    Bygningstype?: string | null;
+    Naringsgruppe?: string | null;
+  } | null;
   FkbData?: { BygningsOmriss?: string | null } | null;
 };
 
