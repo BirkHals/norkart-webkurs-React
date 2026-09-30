@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Overlay } from './Overlay';
 import DrawComponent from './DrawComponent';
 import { SearchBar, type Address } from './SearchBar';
+import type { MapPalette, MapStyleVariant } from '../mapStyles';
 import {
   Paper,
   Table,
@@ -36,19 +37,6 @@ import {
 const TRONDHEIM_COORDS: [number, number] = [10.40565401, 63.4156575];
 
 const KVP_BASE_URL = 'https://kvp.maps.norkart.no/mvt/';
-
-type NorkartBasemapVariant =
-  | 'standard'
-  | 'standard-without-text'
-  | 'greyscale'
-  | 'greyscale-without-text'
-  | 'darkmode'
-  | 'transparent'
-  | 'hybrid'
-  | 'ortofoto';
-const NORKART_BASEMAP_VARIANT: NorkartBasemapVariant = 'ortofoto';
-
-const NORKART_BASEMAP_STYLE = `${KVP_BASE_URL}norkart-basemap/${NORKART_BASEMAP_VARIANT}/style.json`;
 
 const polygonStyle = {
   'fill-outline-color': 'rgba(0,0,0,0.1)',
@@ -78,7 +66,12 @@ const MONTHS: {
   { label: 'Desember', field: 'Desember' },
 ];
 
-export const MapLibreMap = () => {
+type MapLibreMapProps = {
+  mapStyle: MapStyleVariant;
+  palette: MapPalette;
+};
+
+export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
   );
@@ -180,7 +173,7 @@ export const MapLibreMap = () => {
         minZoom={6}
         initialCenter={TRONDHEIM_COORDS}
         initialZoom={12}
-        mapStyle={NORKART_BASEMAP_STYLE}
+        mapStyle={`${KVP_BASE_URL}norkart-basemap/${mapStyle}/style.json`}
         initialTransformRequest={transformRequest}
         style={{
           height: `calc(100dvh - var(--header-height))`,
@@ -219,10 +212,17 @@ export const MapLibreMap = () => {
           />
         )}
 
-        <Overlay>
+        <Overlay
+          style={{
+            backgroundColor: palette.panelBackground,
+            color: palette.panelText,
+            border: `1px solid ${palette.panelBorder}`,
+            borderRadius: 8,
+          }}
+        >
           <h2>Se her!!!</h2>
           <p>Halla så fin du ser ut i dag</p>
-          <SearchBar onAddressSelect={onAddressSelect} />
+          <SearchBar onAddressSelect={onAddressSelect} palette={palette} />
         </Overlay>
 
         <DrawComponent />
@@ -245,6 +245,9 @@ export const MapLibreMap = () => {
             background: 'white',
             borderRadius: 8,
             boxShadow: '0 2px 8px #0003',
+            backgroundColor: palette.panelBackground,
+            color: palette.panelText,
+            border: `1px solid ${palette.panelBorder}`,
             width: 360,
             maxWidth: 'calc(100% - 32px)',
             maxHeight: 'calc(100% - 32px)',
@@ -285,9 +288,24 @@ export const MapLibreMap = () => {
                     <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
                     <TableContainer
                       component={Paper}
-                      sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
+                      sx={{
+                        mt: 1,
+                        maxHeight: 220,
+                        boxShadow: 'none',
+                        backgroundColor: palette.panelBackground,
+                        border: `1px solid ${palette.panelBorder}`,
+                      }}
                     >
-                      <Table size="small" aria-label="Solmengde per måned">
+                      <Table
+                        size="small"
+                        aria-label="Solmengde per måned"
+                        sx={{
+                          '& .MuiTableCell-root': {
+                            color: palette.panelText,
+                            borderColor: palette.panelBorder,
+                          },
+                        }}
+                      >
                         <TableHead>
                           <TableRow>
                             <TableCell>Måned</TableCell>

@@ -1,6 +1,7 @@
 import { Autocomplete, CircularProgress, TextField } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { getAdresserFromSearchText } from '../api/getAdresserFromSearchText';
+import type { MapPalette } from '../mapStyles';
 
 export type Address = {
   PayLoad: {
@@ -14,8 +15,10 @@ export type Address = {
 
 export const SearchBar = ({
   onAddressSelect,
+  palette,
 }: {
   onAddressSelect: (address: Address) => void;
+  palette: MapPalette;
 }) => {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<Address[]>([]);
@@ -50,6 +53,17 @@ export const SearchBar = ({
   return (
     <Autocomplete
       sx={{ width: 300, py: 2 }}
+      slotProps={{
+        paper: {
+          sx: {
+            backgroundColor: palette.panelBackground,
+            color: palette.panelText,
+            '& .MuiAutocomplete-option[aria-selected="true"]': {
+              backgroundColor: palette.selectedOption,
+            },
+          },
+        },
+      }}
       open={open}
       onClose={handleClose}
       getOptionLabel={(option) => option.PayLoad.Text}
@@ -69,6 +83,17 @@ export const SearchBar = ({
         <TextField
           {...params}
           label="Adressesøk"
+          sx={{
+            '& .MuiInputLabel-root': { color: palette.panelText },
+            '& .MuiOutlinedInput-root': {
+              color: palette.panelText,
+              backgroundColor: palette.panelBackground,
+              '& fieldset': { borderColor: palette.panelBorder },
+              '&:hover fieldset': { borderColor: palette.accent },
+              '&.Mui-focused fieldset': { borderColor: palette.accent },
+            },
+            '& .MuiSvgIcon-root': { color: palette.panelText },
+          }}
           slotProps={{
             input: {
               ...params.InputProps,

@@ -24,3 +24,40 @@ code {
     pointer-events: all;
   }
 }
+
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-header {
+  height: var(--header-height);
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 20px;
+  position: sticky;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.16);
+  z-index: 1200;
+}
+
+.app-header__title {
+  margin: 0;
+  font-size: 1.25rem;
+  white-space: nowrap;
+}
+
+.app-header__style-control {
+  width: clamp(180px, 20vw, 220px);
+}
+
+@media (max-width: 420px) {
+  .app-header__title {
+    display: none;
+  }
+}
