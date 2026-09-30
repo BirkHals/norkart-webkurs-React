@@ -37,8 +37,8 @@ export const getTakflateDataForPunkt = async (
       return [];
     }
 
-    const data: { value?: TakflateData[] | null } = await apiResult.json();
-    return data.value ?? [];
+    const data: TakflateData[] = await apiResult.json();
+    return data;
   } catch (error) {
     console.error('An error occurred while fetching roof data:', error);
     return [];

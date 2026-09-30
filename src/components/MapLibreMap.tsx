@@ -11,10 +11,16 @@ import {
   RSource,
   useMap,
 } from 'maplibre-react-components';
-import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
+import type {
+  FeatureCollection,
+  GeoJSON,
+  Geometry,
+  Polygon,
+  Position,
+} from 'geojson';
+import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
-import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import {
   getTakflateDataForPunkt,
   type TakflateData,
@@ -78,6 +84,47 @@ const MONTHS: {
   { label: 'Desember', field: 'Desember' },
 ];
 
+const pointIsInRing = (lng: number, lat: number, ring: Position[]) => {
+  let isInside = false;
+
+  for (let index = 0, previousIndex = ring.length - 1; index < ring.length; previousIndex = index++) {
+    const [currentLng, currentLat] = ring[index];
+    const [previousLng, previousLat] = ring[previousIndex];
+    const crossesLatitude =
+      currentLat > lat !== previousLat > lat &&
+      lng <
+        ((previousLng - currentLng) * (lat - currentLat)) /
+          (previousLat - currentLat) +
+          currentLng;
+
+    if (crossesLatitude) isInside = !isInside;
+  }
+
+  return isInside;
+};
+
+const pointIsInPolygon = (lng: number, lat: number, polygon: Polygon) => {
+  const [outerRing, ...holes] = polygon.coordinates;
+  return (
+    pointIsInRing(lng, lat, outerRing) &&
+    holes.every((hole) => !pointIsInRing(lng, lat, hole))
+  );
+};
+
+const pointIsInGeometry = (lng: number, lat: number, geometry: Geometry) => {
+  if (geometry.type === 'Polygon') {
+    return pointIsInPolygon(lng, lat, geometry);
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some((coordinates) =>
+      pointIsInPolygon(lng, lat, { type: 'Polygon', coordinates })
+    );
+  }
+
+  return false;
+};
+
 export const MapLibreMap = () => {
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
     undefined
@@ -109,13 +156,17 @@ export const MapLibreMap = () => {
     setIsBuilding(undefined);
     setTakflater(undefined);
 
-    const [bygningResponse, hoyder] = await Promise.all([
-      getBygningAtPunkt(lng, lat),
-      getHoydeFromPunkt(lng, lat),
-    ]);
+    const [bygningResponse, hoyder, allTakflater, nearbyAddress] =
+      await Promise.all([
+        getBygningAtPunkt(lng, lat),
+        getHoydeFromPunkt(lng, lat),
+        getTakflateDataForPunkt(lng, lat),
+        selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
+      ]);
     if (clickId !== latestClick.current) return;
 
     setPointHoydeAtPunkt(hoyder[0]?.Z);
+    setPointAddress(selectedAddress ?? nearbyAddress);
 
     let parsedOutline: GeoJSON | undefined;
     try {
@@ -129,19 +180,18 @@ export const MapLibreMap = () => {
     const foundBuilding = Boolean(parsedOutline);
     setIsBuilding(foundBuilding);
 
-    if (!foundBuilding) {
-      setPointAddress(null);
-      setTakflater([]);
-      return;
-    }
-
-    const [takflateData, nearbyAddress] = await Promise.all([
-      getTakflateDataForPunkt(lng, lat),
-      selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
-    ]);
-    if (clickId !== latestClick.current) return;
-
-    setPointAddress(selectedAddress ?? nearbyAddress);
+    const takflateData = allTakflater.filter((takflate) => {
+      try {
+        return pointIsInGeometry(
+          lng,
+          lat,
+          JSON.parse(takflate.Geometri) as Geometry
+        );
+      } catch (error) {
+        console.error('Could not parse roof geometry:', error);
+        return false;
+      }
+    });
     setTakflater(takflateData);
   };
 
@@ -259,60 +309,51 @@ export const MapLibreMap = () => {
           <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
+          {isBuilding && (
+            <div>
+              Adresse:{' '}
+              {pointAddress === undefined
+                ? 'Henter...'
+                : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
+            </div>
+          )}
 
-          {isBuilding === undefined ? (
-            <div>Kontrollerer om punktet ligger på en bygning...</div>
-          ) : isBuilding ? (
-            <>
-              <div>
-                Adresse:{' '}
-                {pointAddress === undefined
-                  ? 'Henter...'
-                  : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
-              </div>
-              <h3>Solmengde for tak</h3>
-              {takflater === undefined ? (
-                <div>Henter takdata...</div>
-              ) : takflater.length === 0 ? (
-                <div>
-                  Bygningen er markert rosa, men det finnes ingen takflater
-                  eller soldata for den.
-                </div>
-              ) : (
-                takflater.map((takflate) => (
-                  <section key={takflate.TakflateId}>
-                    <strong>Takflate {takflate.TakflateId}</strong>
-                    <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
-                    <TableContainer
-                      component={Paper}
-                      sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
-                    >
-                      <Table size="small" aria-label="Solmengde per måned">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Måned</TableCell>
-                            <TableCell align="right">kWh/m²</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {MONTHS.map(({ label, field }) => (
-                            <TableRow key={field}>
-                              <TableCell component="th" scope="row">
-                                {label}
-                              </TableCell>
-                              <TableCell align="right">
-                                {takflate[field]}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </section>
-                ))
-              )}
-            </>
-          ) : null}
+          <h3>Solmengde for tak</h3>
+          {takflater === undefined ? (
+            <div>Henter takdata...</div>
+          ) : takflater.length === 0 ? (
+            <div>Fant ingen takflater ved punktet.</div>
+          ) : (
+            takflater.map((takflate) => (
+              <section key={takflate.TakflateId}>
+                <strong>Takflate {takflate.TakflateId}</strong>
+                <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
+                <TableContainer
+                  component={Paper}
+                  sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
+                >
+                  <Table size="small" aria-label="Solmengde per måned">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Måned</TableCell>
+                        <TableCell align="right">kWh/m²</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {MONTHS.map(({ label, field }) => (
+                        <TableRow key={field}>
+                          <TableCell component="th" scope="row">
+                            {label}
+                          </TableCell>
+                          <TableCell align="right">{takflate[field]}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </section>
+            ))
+          )}
         </div>
       )}
     </div>
