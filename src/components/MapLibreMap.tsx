@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Overlay } from './Overlay';
 import DrawComponent from './DrawComponent';
 import { SearchBar, type Address } from './SearchBar';
+import type { MapPalette, MapStyleVariant } from '../mapStyles';
 import {
   Paper,
   Table,
@@ -38,19 +39,6 @@ import {
 const TRONDHEIM_COORDS: [number, number] = [10.40565401, 63.4156575];
 
 const KVP_BASE_URL = 'https://kvp.maps.norkart.no/mvt/';
-
-type NorkartBasemapVariant =
-  | 'standard'
-  | 'standard-without-text'
-  | 'greyscale'
-  | 'greyscale-without-text'
-  | 'darkmode'
-  | 'transparent'
-  | 'hybrid'
-  | 'ortofoto';
-const NORKART_BASEMAP_VARIANT: NorkartBasemapVariant = 'ortofoto';
-
-const NORKART_BASEMAP_STYLE = `${KVP_BASE_URL}norkart-basemap/${NORKART_BASEMAP_VARIANT}/style.json`;
 
 const roofStyle = {
   'line-color': '#334155',
@@ -120,7 +108,12 @@ const pointIsInGeometry = (lng: number, lat: number, geometry: Geometry) => {
   return false;
 };
 
-export const MapLibreMap = () => {
+type MapLibreMapProps = {
+  mapStyle: MapStyleVariant;
+  palette: MapPalette;
+};
+
+export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
   const [building, setBuilding] = useState<Bygning | null | undefined>();
   const category = getBuildingCategory(building);
   const [pointHoyde, setPointHoydeAtPunkt] = useState<number | undefined>(
@@ -154,18 +147,14 @@ export const MapLibreMap = () => {
     setIsBuilding(undefined);
     setTakflater(undefined);
 
-    const [bygningResponse, hoyder, allTakflater, nearbyAddress] =
-      await Promise.all([
-        getBygningAtPunkt(lng, lat),
-        getHoydeFromPunkt(lng, lat),
-        getTakflateDataForPunkt(lng, lat),
-        selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
-      ]);
+    const [bygningResponse, hoyder] = await Promise.all([
+      getBygningAtPunkt(lng, lat),
+      getHoydeFromPunkt(lng, lat),
+    ]);
     if (clickId !== latestClick.current) return;
 
     setPointHoydeAtPunkt(hoyder[0]?.Z);
     setBuilding(bygningResponse ?? null);
-    setPointAddress(selectedAddress ?? nearbyAddress);
 
     let parsedOutline: GeoJSON | undefined;
     try {
@@ -179,6 +168,19 @@ export const MapLibreMap = () => {
     const foundBuilding = Boolean(parsedOutline);
     setIsBuilding(foundBuilding);
 
+    if (!foundBuilding) {
+      setPointAddress(null);
+      setTakflater([]);
+      return;
+    }
+
+    const [allTakflater, nearbyAddress] = await Promise.all([
+      getTakflateDataForPunkt(lng, lat),
+      selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
+    ]);
+    if (clickId !== latestClick.current) return;
+
+    setPointAddress(selectedAddress ?? nearbyAddress);
     const takflateData = allTakflater.filter((takflate) => {
       try {
         return pointIsInGeometry(
@@ -229,7 +231,7 @@ export const MapLibreMap = () => {
         minZoom={6}
         initialCenter={TRONDHEIM_COORDS}
         initialZoom={12}
-        mapStyle={NORKART_BASEMAP_STYLE}
+        mapStyle={`${KVP_BASE_URL}norkart-basemap/${mapStyle}/style.json`}
         initialTransformRequest={transformRequest}
         style={{
           height: `calc(100dvh - var(--header-height))`,
@@ -270,10 +272,17 @@ export const MapLibreMap = () => {
           </>
         )}
 
-        <Overlay>
+        <Overlay
+          style={{
+            backgroundColor: palette.panelBackground,
+            color: palette.panelText,
+            border: `1px solid ${palette.panelBorder}`,
+            borderRadius: 8,
+          }}
+        >
           <h2>Se her!!!</h2>
           <p>Halla så fin du ser ut i dag</p>
-          <SearchBar onAddressSelect={onAddressSelect} />
+          <SearchBar onAddressSelect={onAddressSelect} palette={palette} />
           <div
             style={{ marginTop: 12 }}
             aria-label="Tegnforklaring for bygningstyper"
@@ -324,6 +333,9 @@ export const MapLibreMap = () => {
             background: 'white',
             borderRadius: 8,
             boxShadow: '0 2px 8px #0003',
+            backgroundColor: palette.panelBackground,
+            color: palette.panelText,
+            border: `1px solid ${palette.panelBorder}`,
             width: 360,
             maxWidth: 'calc(100% - 32px)',
             maxHeight: 'calc(100% - 32px)',
@@ -366,51 +378,74 @@ export const MapLibreMap = () => {
           <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
-          {isBuilding && (
-            <div>
-              Adresse:{' '}
-              {pointAddress === undefined
-                ? 'Henter...'
-                : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
-            </div>
-          )}
-
-          <h3>Solmengde for tak</h3>
-          {takflater === undefined ? (
-            <div>Henter takdata...</div>
-          ) : takflater.length === 0 ? (
-            <div>Fant ingen takflater ved punktet.</div>
-          ) : (
-            takflater.map((takflate) => (
-              <section key={takflate.TakflateId}>
-                <strong>Takflate {takflate.TakflateId}</strong>
-                <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
-                <TableContainer
-                  component={Paper}
-                  sx={{ mt: 1, maxHeight: 220, boxShadow: 'none' }}
-                >
-                  <Table size="small" aria-label="Solmengde per måned">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Måned</TableCell>
-                        <TableCell align="right">kWh/m²</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {MONTHS.map(({ label, field }) => (
-                        <TableRow key={field}>
-                          <TableCell component="th" scope="row">
-                            {label}
-                          </TableCell>
-                          <TableCell align="right">{takflate[field]}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </section>
-            ))
-          )}
+          {isBuilding === undefined ? (
+            <div>Kontrollerer om punktet ligger på en bygning...</div>
+          ) : isBuilding ? (
+            <>
+              <div>
+                Adresse:{' '}
+                {pointAddress === undefined
+                  ? 'Henter...'
+                  : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
+              </div>
+              <h3>Solmengde for tak</h3>
+              {takflater === undefined ? (
+                <div>Henter takdata...</div>
+              ) : takflater.length === 0 ? (
+                <div>
+                  Bygningen er markert i kartet, men det finnes ingen takflater
+                  eller soldata for den.
+                </div>
+              ) : (
+                takflater.map((takflate) => (
+                  <section key={takflate.TakflateId}>
+                    <strong>Takflate {takflate.TakflateId}</strong>
+                    <div>Årssum: {takflate.Solinnstraaling} kWh/m²</div>
+                    <TableContainer
+                      component={Paper}
+                      sx={{
+                        mt: 1,
+                        maxHeight: 220,
+                        boxShadow: 'none',
+                        backgroundColor: palette.panelBackground,
+                        border: `1px solid ${palette.panelBorder}`,
+                      }}
+                    >
+                      <Table
+                        size="small"
+                        aria-label="Solmengde per måned"
+                        sx={{
+                          '& .MuiTableCell-root': {
+                            color: palette.panelText,
+                            borderColor: palette.panelBorder,
+                          },
+                        }}
+                      >
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Måned</TableCell>
+                            <TableCell align="right">kWh/m²</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {MONTHS.map(({ label, field }) => (
+                            <TableRow key={field}>
+                              <TableCell component="th" scope="row">
+                                {label}
+                              </TableCell>
+                              <TableCell align="right">
+                                {takflate[field]}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </section>
+                ))
+              )}
+            </>
+          ) : null}
         </div>
       )}
     </div>
