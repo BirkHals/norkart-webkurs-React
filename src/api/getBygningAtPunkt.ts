@@ -1,14 +1,30 @@
-export const getBygningAtPunkt = async (x: number, y: number) => {
+type Bygning = {
+  FkbData?: { BygningsOmriss?: string | null } | null;
+};
+
+export const getBygningAtPunkt = async (
+  x: number,
+  y: number
+): Promise<Bygning | undefined> => {
   const apiKey = import.meta.env.VITE_API_KEY;
   const query = `https://bygning.api.norkart.no/bygninger/byposition?x=${x}&y=${y}&MaxRadius=1&GeometryTextFormat=GeoJson&IncludeFkbData=true`;
 
-  // TODO: Fullfør/endre koden for hente og returnere bygningsdata på et punkt
-
-  // Hint: Du kan se på getAdresseFromSearchText og getHoydeFromPunkt for å få en idé om hvordan
-  // dette kan gjøres.
-
-  // Merk at dette er en GET request, og ikke en POST request!
-
-  // Når du har fått til kallet til API-et kan du se i Network-taben i nettleseren eller i
-  // konsollen for å se hvordan responsen ser ut.
+  try {
+    const apiResult = await fetch(query, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-WAAPI-TOKEN': `${apiKey}`,
+      },
+    });
+    if (!apiResult.ok) {
+      console.error('API request failed with status:', apiResult.status);
+      return undefined;
+    }
+    const data: { Bygninger?: Bygning[] } = await apiResult.json();
+    return data.Bygninger?.[0];
+  } catch (error) {
+    console.error('An error occurred while fetching building data:', error);
+    return undefined;
+  }
 };
