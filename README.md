@@ -125,7 +125,11 @@ Deretter: la kartet "fly til" valgt adresse ved å bruke `address`-staten sammen
 
 ### Oppgave 3: Vis bygninger i kartet
 
-Implementer [getBygningAtPunkt.ts](/src/api/getBygningAtPunkt.ts) (se filen for instruksjoner) for å hente bygningsdata for et punkt. Bruk den deretter i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx):
+Implementer [getBygningAtPunkt.ts](/src/api/getBygningAtPunkt.ts) (se filen for instruksjoner) for å hente bygningsdata for et punkt.
+
+_Hint: Det kan være lurt å `console.log`-e response-dataen for å finne ut av hvordan man henter ut bygningsgeometrien._
+
+Bruk den deretter i [MapLibreMap.tsx](/src/components/MapLibreMap.tsx):
 
 1. Legg til importene:
 
