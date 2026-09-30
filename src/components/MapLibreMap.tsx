@@ -5,7 +5,13 @@ import {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { RLayer, RMap, RSource, useMap } from 'maplibre-react-components';
-import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
+import type {
+  FeatureCollection,
+  GeoJSON,
+  Geometry,
+  Polygon,
+  Position,
+} from 'geojson';
 import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import { getBygningAtPunkt, type Bygning } from '../api/getBygningAtPunkt';
 import { buildingCategories, getBuildingCategory } from '../buildingCategories';
@@ -69,6 +75,51 @@ const MONTHS: {
   { label: 'Desember', field: 'Desember' },
 ];
 
+const pointIsInRing = (lng: number, lat: number, ring: Position[]) => {
+  let isInside = false;
+
+  for (
+    let index = 0, previousIndex = ring.length - 1;
+    index < ring.length;
+    previousIndex = index++
+  ) {
+    const [currentLng, currentLat] = ring[index];
+    const [previousLng, previousLat] = ring[previousIndex];
+    const crossesLatitude =
+      currentLat > lat !== previousLat > lat &&
+      lng <
+        ((previousLng - currentLng) * (lat - currentLat)) /
+          (previousLat - currentLat) +
+          currentLng;
+
+    if (crossesLatitude) isInside = !isInside;
+  }
+
+  return isInside;
+};
+
+const pointIsInPolygon = (lng: number, lat: number, polygon: Polygon) => {
+  const [outerRing, ...holes] = polygon.coordinates;
+  return (
+    pointIsInRing(lng, lat, outerRing) &&
+    holes.every((hole) => !pointIsInRing(lng, lat, hole))
+  );
+};
+
+const pointIsInGeometry = (lng: number, lat: number, geometry: Geometry) => {
+  if (geometry.type === 'Polygon') {
+    return pointIsInPolygon(lng, lat, geometry);
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some((coordinates) =>
+      pointIsInPolygon(lng, lat, { type: 'Polygon', coordinates })
+    );
+  }
+
+  return false;
+};
+
 export const MapLibreMap = () => {
   const [building, setBuilding] = useState<Bygning | null | undefined>();
   const category = getBuildingCategory(building);
@@ -83,6 +134,7 @@ export const MapLibreMap = () => {
   const [bygningsOmriss, setBygningsOmriss] = useState<GeoJSON | undefined>(
     undefined
   );
+  const [isBuilding, setIsBuilding] = useState<boolean | undefined>(undefined);
   const [takflater, setTakflater] = useState<TakflateData[] | undefined>(
     undefined
   );
@@ -99,9 +151,10 @@ export const MapLibreMap = () => {
     setPointHoydeAtPunkt(undefined);
     setBygningsOmriss(undefined);
     setBuilding(undefined);
+    setIsBuilding(undefined);
     setTakflater(undefined);
 
-    const [bygningResponse, hoyder, takflateData, nearbyAddress] =
+    const [bygningResponse, hoyder, allTakflater, nearbyAddress] =
       await Promise.all([
         getBygningAtPunkt(lng, lat),
         getHoydeFromPunkt(lng, lat),
@@ -110,17 +163,35 @@ export const MapLibreMap = () => {
       ]);
     if (clickId !== latestClick.current) return;
 
-    setPointAddress(selectedAddress ?? nearbyAddress);
     setPointHoydeAtPunkt(hoyder[0]?.Z);
-    setTakflater(takflateData);
     setBuilding(bygningResponse ?? null);
+    setPointAddress(selectedAddress ?? nearbyAddress);
+
+    let parsedOutline: GeoJSON | undefined;
     try {
       const omriss = bygningResponse?.FkbData?.BygningsOmriss;
-      setBygningsOmriss(omriss ? JSON.parse(omriss) : undefined);
+      parsedOutline = omriss ? (JSON.parse(omriss) as GeoJSON) : undefined;
     } catch (error) {
       console.error('Could not parse building geometry:', error);
-      setBygningsOmriss(undefined);
     }
+
+    setBygningsOmriss(parsedOutline);
+    const foundBuilding = Boolean(parsedOutline);
+    setIsBuilding(foundBuilding);
+
+    const takflateData = allTakflater.filter((takflate) => {
+      try {
+        return pointIsInGeometry(
+          lng,
+          lat,
+          JSON.parse(takflate.Geometri) as Geometry
+        );
+      } catch (error) {
+        console.error('Could not parse roof geometry:', error);
+        return false;
+      }
+    });
+    setTakflater(takflateData);
   };
 
   const onMapClick = (e: MapLayerMouseEvent) => {
@@ -259,7 +330,9 @@ export const MapLibreMap = () => {
             overflowY: 'auto',
           }}
         >
-          <strong>Punktinformasjon</strong>
+          <strong>
+            {isBuilding ? 'Bygningsinformasjon' : 'Punktinformasjon'}
+          </strong>
           <div
             style={{
               margin: '8px 0',
@@ -291,23 +364,22 @@ export const MapLibreMap = () => {
           <div>Latitude: {clickPoint.lat.toFixed(6)}</div>
           <div>Longitude: {clickPoint.lng.toFixed(6)}</div>
           <div>
-            Adresse:{' '}
-            {pointAddress === undefined
-              ? 'Henter...'
-              : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
-          </div>
-          <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
+          {isBuilding && (
+            <div>
+              Adresse:{' '}
+              {pointAddress === undefined
+                ? 'Henter...'
+                : (pointAddress ?? 'Fant ingen adresse nær punktet.')}
+            </div>
+          )}
 
           <h3>Solmengde for tak</h3>
           {takflater === undefined ? (
             <div>Henter takdata...</div>
           ) : takflater.length === 0 ? (
-            <div>
-              Ingen takflate funnet ved punktet. Soldata finnes ikke for veier
-              og andre områder uten tak.
-            </div>
+            <div>Fant ingen takflater ved punktet.</div>
           ) : (
             takflater.map((takflate) => (
               <section key={takflate.TakflateId}>
