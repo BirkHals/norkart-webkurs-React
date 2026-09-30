@@ -4,7 +4,13 @@ import {
   type RequestTransformFunction,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RLayer, RMap, RSource, useMap } from 'maplibre-react-components';
+import {
+  RLayer,
+  RMap,
+  RNavigationControl,
+  RSource,
+  useMap,
+} from 'maplibre-react-components';
 import type {
   FeatureCollection,
   GeoJSON,
@@ -279,6 +285,8 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
             />
           </>
         )}
+
+        <RNavigationControl position="bottom-right" showCompass={false} />
 
         <Overlay
           style={{
