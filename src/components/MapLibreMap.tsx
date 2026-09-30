@@ -11,10 +11,16 @@ import {
   RSource,
   useMap,
 } from 'maplibre-react-components';
-import type { FeatureCollection, GeoJSON, Geometry } from 'geojson';
+import type {
+  FeatureCollection,
+  GeoJSON,
+  Geometry,
+  Polygon,
+  Position,
+} from 'geojson';
+import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import { getBygningAtPunkt } from '../api/getBygningAtPunkt';
 import { getHoydeFromPunkt } from '../api/getHoydeFromPunkt';
-import { getAdresseAtPunkt } from '../api/getAdresseAtPunkt';
 import {
   getTakflateDataForPunkt,
   type TakflateData,
@@ -65,6 +71,51 @@ const MONTHS: {
   { label: 'November', field: 'November' },
   { label: 'Desember', field: 'Desember' },
 ];
+
+const pointIsInRing = (lng: number, lat: number, ring: Position[]) => {
+  let isInside = false;
+
+  for (
+    let index = 0, previousIndex = ring.length - 1;
+    index < ring.length;
+    previousIndex = index++
+  ) {
+    const [currentLng, currentLat] = ring[index];
+    const [previousLng, previousLat] = ring[previousIndex];
+    const crossesLatitude =
+      currentLat > lat !== previousLat > lat &&
+      lng <
+        ((previousLng - currentLng) * (lat - currentLat)) /
+          (previousLat - currentLat) +
+          currentLng;
+
+    if (crossesLatitude) isInside = !isInside;
+  }
+
+  return isInside;
+};
+
+const pointIsInPolygon = (lng: number, lat: number, polygon: Polygon) => {
+  const [outerRing, ...holes] = polygon.coordinates;
+  return (
+    pointIsInRing(lng, lat, outerRing) &&
+    holes.every((hole) => !pointIsInRing(lng, lat, hole))
+  );
+};
+
+const pointIsInGeometry = (lng: number, lat: number, geometry: Geometry) => {
+  if (geometry.type === 'Polygon') {
+    return pointIsInPolygon(lng, lat, geometry);
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some((coordinates) =>
+      pointIsInPolygon(lng, lat, { type: 'Polygon', coordinates })
+    );
+  }
+
+  return false;
+};
 
 type MapLibreMapProps = {
   mapStyle: MapStyleVariant;
@@ -128,13 +179,25 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
       return;
     }
 
-    const [takflateData, nearbyAddress] = await Promise.all([
+    const [allTakflater, nearbyAddress] = await Promise.all([
       getTakflateDataForPunkt(lng, lat),
       selectedAddress ? Promise.resolve(null) : getAdresseAtPunkt(lng, lat),
     ]);
     if (clickId !== latestClick.current) return;
 
     setPointAddress(selectedAddress ?? nearbyAddress);
+    const takflateData = allTakflater.filter((takflate) => {
+      try {
+        return pointIsInGeometry(
+          lng,
+          lat,
+          JSON.parse(takflate.Geometri) as Geometry
+        );
+      } catch (error) {
+        console.error('Could not parse roof geometry:', error);
+        return false;
+      }
+    });
     setTakflater(takflateData);
   };
 
@@ -262,7 +325,6 @@ export const MapLibreMap = ({ mapStyle, palette }: MapLibreMapProps) => {
           <div>
             Høyde: {pointHoyde === undefined ? 'Henter...' : `${pointHoyde} m`}
           </div>
-
           {isBuilding === undefined ? (
             <div>Kontrollerer om punktet ligger på en bygning...</div>
           ) : isBuilding ? (
